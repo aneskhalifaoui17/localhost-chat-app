@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Web Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            line-height: 1.6;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #333;
+        }
+        
+        h1 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            padding: 8px;
+            border-radius: 4px;
+            margin: 10px 0;
+            background: #333;
+            text-align: center;
+        }
+        
+        .status.connected { background: #2e7d32; }
+        .status.disconnected { background: #c62828; }
+        
+        .chat-container {
+            flex: 1;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            overflow-y: auto;
+            min-height: 400px;
+            max-height: 60vh;
+        }
+        
+        .messages {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .message {
+            padding: 10px 15px;
+            border-radius: 8px;
+            background: #333;
+            max-width: 80%;
+        }
+        
+        .message.own {
+            align-self: flex-end;
+            background: #4CAF50;
+        }
+        
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        
+        .message.own .message-header {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .user-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        input, button {
+            padding: 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        input {
+            flex: 1;
+            background: #333;
+            color: white;
+            border: 1px solid #444;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .user-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 4px;
+        }
+        
+        .user-info input {
+            flex: 1;
+            max-width: 200px;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: auto;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+            border-top: 1px solid #333;
+        }
+        
+        .info-box {
+            background: #2a2a2a;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        
+        .info-box h3 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        .info-box ul {
+            padding-left: 20px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .user-input {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+            }
+            
+            .message {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💬 Simple Web Chat</h1>
+            <div id="status" class="status disconnected">Disconnected</div>
+        </header>
+        
+        <div class="user-info">
+            <label for="username">Your Name:</label>
+            <input type="text" id="username" placeholder="Enter your name" value="User">
+            <button onclick="changeUsername()">Update</button>
+        </div>
+        
+        <div class="chat-container">
+            <div id="messages" class="messages">
+                <!-- Messages will appear here -->
+            </div>
+        </div>
+        
+        <div class="user-input">
+            <input type="text" id="messageInput" placeholder="Type your message..." disabled>
+            <button id="sendButton" onclick="sendMessage()" disabled>Send</button>
+        </div>
+        
+        <div class="info-box">
+            <h3>How to use:</h3>
+            <ul>
+                <li>Run the Python server on your PC</li>
+                <li>Open this page on other devices in the same network</li>
+                <li>Chat in real-time!</li>
+            </ul>
+            <p id="serverInfo">Server: Connecting...</p>
+        </div>
+        
+        <footer>
+            Simple Web Chat App | Runs on local network
+        </footer>
+    </div>
+    
+    <script>
+        let ws = null;
+        let username = "User";
+        let serverUrl = "";
+        
+        // Get username from input
+        function changeUsername() {
+            const input = document.getElementById('username');
+            if (input.value.trim()) {
+                username = input.value.trim();
+                showNotification('Username updated to: ' + username);
+            }
+        }
+        
+        // Initialize WebSocket connection
+        function connect() {
+            // Try different possible server addresses
+            const host = window.location.hostname;
+            const possibleUrls = [
+                `ws://${host}:8765`,
+                `ws://${getLocalIP()}:8765`,
+                'ws://localhost:8765',
+                `ws://${window.location.hostname}:8765`
+            ];
+            
+            // Try each URL until one works
+            tryConnect(possibleUrls, 0);
+        }
+        
+        function tryConnect(urls, index) {
+            if (index >= urls.length) {
+                updateStatus('Cannot connect to server', 'disconnected');
+                document.getElementById('serverInfo').textContent = 
+                    'Server: Connection failed. Make sure server.py is running.';
+                return;
+            }
+            
+            serverUrl = urls[index];
+            document.getElementById('serverInfo').textContent = `Server: Trying ${serverUrl}...`;
+            
+            ws = new WebSocket(serverUrl);
+            
+            ws.onopen = function() {
+                updateStatus('Connected to chat server', 'connected');
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('serverInfo').textContent = `Server: ${serverUrl}`;
+                console.log('Connected to:', serverUrl);
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'history') {
+                    // Load chat history
+                    data.data.forEach(addMessage);
+                } else if (data.type === 'message') {
+                    // Add new message
+                    addMessage(data.data);
+                }
+            };
+            
+            ws.onclose = function() {
+                updateStatus('Disconnected. Reconnecting...', 'disconnected');
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendButton').disabled = true;
+                
+                // Try to reconnect after 3 seconds
+                setTimeout(() => {
+                    if (index < urls.length - 1) {
+                        tryConnect(urls, index + 1);
+                    } else {
+                        // Try the first URL again
+                        setTimeout(() => tryConnect(urls, 0), 3000);
+                    }
+                }, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+        
+        // Send a message
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            ws.send(JSON.stringify({
+                type: 'message',
+                user: username,
+                text: message
+            }));
+            
+            input.value = '';
+            input.focus();
+        }
+        
+        // Add message to chat
+        function addMessage(msg) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            
+            messageDiv.className = 'message' + (msg.user === username ? ' own' : '');
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="user">${msg.user}</span>
+                    <span class="time">${msg.time} ${msg.date}</span>
+                </div>
+                <div class="text">${msg.text}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // Update connection status
+        function updateStatus(text, type) {
+            const status = document.getElementById('status');
+            status.textContent = text;
+            status.className = `status ${type}`;
+        }
+        
+        // Show notification
+        function showNotification(text) {
+            const notification = document.createElement('div');
+            notification.textContent = text;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #4CAF50;
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                z-index: 1000;
+                animation: fadeOut 3s forwards;
+            `;
+            
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 3000);
+        }
+        
+        // Get local IP (for display purposes)
+        function getLocalIP() {
+            // This is a fallback - browser security prevents getting actual local IP
+            return window.location.hostname === 'localhost' ? 'localhost' : window.location.hostname;
+        }
+        
+        // Handle Enter key in message input
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // Start connection when page loads
+        window.onload = function() {
+            username = document.getElementById('username').value;
+            connect();
+        };
+        
+        // Add CSS animation for notifications
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes fadeOut {
+                0% { opacity: 1; }
+                70% { opacity: 1; }
+                100% { opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
